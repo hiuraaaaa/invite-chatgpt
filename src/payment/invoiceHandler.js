@@ -62,7 +62,7 @@ async function createInvoice(data) {
 }
 
 /**
- * TRIPAY Implementation
+ * TRIPAY Implementation - FIXED VERSION
  */
 async function createTripayInvoice(reference, amount) {
   const apiKey = process.env.TRIPAY_API_KEY;
@@ -74,8 +74,16 @@ async function createTripayInvoice(reference, amount) {
     ? 'https://tripay.co.id/api'
     : 'https://tripay.co.id/api-sandbox';
 
+  // Generate signature SEBELUM create data object
+  const signature = crypto
+    .createHmac('sha256', privateKey)
+    .update(merchantCode + reference + amount)
+    .digest('hex');
+
+  console.log('🔐 Tripay Signature Generated:', signature);
+
   const data = {
-    method: 'QRIS',
+    method: 'QRISC',
     merchant_ref: reference,
     amount: amount,
     customer_name: 'Customer',
@@ -89,14 +97,16 @@ async function createTripayInvoice(reference, amount) {
     ],
     callback_url: process.env.CALLBACK_URL,
     return_url: 'https://t.me/yourbotusername',
-    expired_time: Math.floor(Date.now() / 1000) + (24 * 60 * 60) // 24 jam
+    expired_time: Math.floor(Date.now() / 1000) + (24 * 60 * 60), // 24 jam
+    signature: signature  // ← INI YANG PENTING!
   };
 
-  // Generate signature
-  const signature = crypto
-    .createHmac('sha256', privateKey)
-    .update(merchantCode + reference + amount)
-    .digest('hex');
+  console.log('📤 Sending request to Tripay:', {
+    url: `${baseUrl}/transaction/create`,
+    merchant_ref: reference,
+    amount: amount,
+    signature: signature
+  });
 
   try {
     const response = await axios.post(`${baseUrl}/transaction/create`, data, {
@@ -105,6 +115,8 @@ async function createTripayInvoice(reference, amount) {
         'Content-Type': 'application/json'
       }
     });
+
+    console.log('✅ Tripay Response:', response.data);
 
     if (response.data.success) {
       const trxData = response.data.data;
@@ -117,7 +129,7 @@ async function createTripayInvoice(reference, amount) {
       throw new Error(response.data.message);
     }
   } catch (error) {
-    console.error('Tripay error:', error.response?.data || error.message);
+    console.error('❌ Tripay error:', error.response?.data || error.message);
     throw error;
   }
 }
